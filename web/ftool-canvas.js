@@ -1194,16 +1194,19 @@ export class FtoolCanvasApp {
       const midY = (p1.y + p2.y) / 2;
       const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
 
-      // Offset label perpendicular to bar
+      // Offset label perpendicular to bar with clean backdrop
       const offsetDist = 12;
       const lx = midX - Math.sin(angle) * offsetDist;
       const ly = midY + Math.cos(angle) * offsetDist;
-
-      ctx.fillStyle = isSelected ? '#087c6b' : '#5b788a';
+      const memLabel = mem.name || mem.id;
       ctx.font = 'bold 10px sans-serif';
+      const mtw = ctx.measureText(memLabel).width;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+      ctx.fillRect(lx - mtw / 2 - 3, ly - 6, mtw + 6, 12);
+      ctx.fillStyle = isSelected ? '#087c6b' : '#5b788a';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(mem.name || mem.id, lx, ly);
+      ctx.fillText(memLabel, lx, ly);
 
       // End releases (rótulas)
       const release = mem.release || 'none';
@@ -1239,21 +1242,45 @@ export class FtoolCanvasApp {
     for (const node of this.nodes) {
       const p = this.toScreen(node.x, node.y);
       const isSelected = this.selectedEntity?.type === 'node' && this.selectedEntity?.id === node.id;
+      const isHinged = Boolean(node.hinged || node.joint === 'articulado');
 
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, isSelected ? 7 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#13b99c' : '#123c5b';
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      if (isHinged) {
+        // Nodal Hinge (Rótula no Nó): distinct white-filled circle with border and central pivot pin
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, isSelected ? 6.5 : 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = isSelected ? '#13b99c' : '#123c5b';
+        ctx.lineWidth = isSelected ? 2.5 : 2;
+        ctx.stroke();
 
-      // Node label
-      ctx.fillStyle = '#123c5b';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = isSelected ? '#13b99c' : '#123c5b';
+        ctx.fill();
+      } else {
+        // Rigid Node: solid dot
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, isSelected ? 7 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = isSelected ? '#13b99c' : '#123c5b';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Node label with clean pill backdrop
+      const label = node.name || node.id;
       ctx.font = 'bold 11px sans-serif';
+      const tw = ctx.measureText(label).width;
+      const lx = p.x + 8;
+      const ly = node.support ? p.y - 12 : p.y - 5;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.fillRect(lx - 2, ly - 7, tw + 4, 14);
+      ctx.fillStyle = isSelected ? '#087c6b' : '#123c5b';
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(node.name || node.id, p.x + 8, p.y - 4);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, lx, ly);
     }
     ctx.restore();
   }
@@ -1407,6 +1434,10 @@ export class FtoolCanvasApp {
 
   drawLoads(ctx) {
     ctx.save();
+    const isResultsMode = Boolean(this.solverResults && this.currentMode !== 'edit');
+    if (isResultsMode) {
+      ctx.globalAlpha = 0.45;
+    }
 
     // 1. Nodal Loads
     for (const load of this.nodalLoads) {
@@ -1434,11 +1465,19 @@ export class FtoolCanvasApp {
         // Arrowhead
         this.drawArrowHead(ctx, p.x, p.y, angle);
 
-        // Value text
+        // Value text with pill backdrop
         const mag = Math.hypot(load.fx, load.fy);
+        const text = `${mag.toFixed(1)} kN`;
         ctx.font = 'bold 10px monospace';
+        const tw = ctx.measureText(text).width;
+        const tx = startX - Math.cos(angle) * 12;
+        const ty = startY - Math.sin(angle) * 12;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(tx - tw / 2 - 2, ty - 6, tw + 4, 12);
+        ctx.fillStyle = '#205d8c';
         ctx.textAlign = 'center';
-        ctx.fillText(`${mag.toFixed(1)} kN`, startX - Math.cos(angle) * 10, startY - Math.sin(angle) * 10);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, tx, ty);
       }
 
       // Moment (Mz)
@@ -1529,11 +1568,18 @@ export class FtoolCanvasApp {
         }
         ctx.stroke();
 
-        // Text label
+        // Text label with clean pill backdrop
         ctx.font = 'bold 10px monospace';
-        ctx.textAlign = 'center';
+        const qText = `q = ${Math.abs(qy1).toFixed(1)} kN/m`;
+        const qtw = ctx.measureText(qText).width;
         const labelPos = topPts[Math.floor(topPts.length / 2)];
-        ctx.fillText(`q = ${Math.abs(qy1).toFixed(1)} kN/m`, labelPos.x, labelPos.y - 6);
+        const qyPos = labelPos.y - 8;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(labelPos.x - qtw / 2 - 4, qyPos - 7, qtw + 8, 14);
+        ctx.fillStyle = '#205d8c';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(qText, labelPos.x, qyPos);
       }
     }
 
@@ -1662,9 +1708,9 @@ export class FtoolCanvasApp {
       if (Lscreen < 5) continue;
 
       const barAngle = Math.atan2(dy, dx);
-      // Perpendicular normal to bar in screen coordinates
-      const nx = -Math.sin(barAngle);
-      const ny = Math.cos(barAngle);
+      // Perpendicular unit normal in screen coordinates pointing towards local +y' (UPWARDS on screen for horizontal bar)
+      const nx = Math.sin(barAngle);
+      const ny = -Math.cos(barAngle);
 
       const samples = memRes.samples;
       const polyPts = [];
@@ -1675,10 +1721,24 @@ export class FtoolCanvasApp {
         const bx = p1.x + t * dx;
         const by = p1.y + t * dy;
 
-        let val = isM ? s.M : isV ? s.V : s.N;
-        // In Ftool, Moment diagram is plotted on the TENSION side (fibra tracionada)!
-        // When M > 0 (bottom fiber in tension on horizontal beam), diagram points in negative local Y direction.
-        const ordinate = val * diagramUnitScale;
+        let val = 0;
+        let ordinate = 0;
+        if (isM) {
+          // Bending Moment: plotted on the TENSION side (fibras tracionadas).
+          // Positive moment (M > 0, bottom in tension) -> drawn DOWNWARDS (towards -y').
+          // Negative moment (M < 0, top in tension) -> drawn UPWARDS (towards +y').
+          val = s.M;
+          ordinate = -val * diagramUnitScale;
+        } else if (isV) {
+          // Shear force: positive (+) drawn UPWARDS, negative (-) drawn DOWNWARDS.
+          val = s.V;
+          ordinate = val * diagramUnitScale;
+        } else {
+          // Normal force: tension (+) drawn UPWARDS, compression (-) drawn DOWNWARDS.
+          val = s.N;
+          ordinate = val * diagramUnitScale;
+        }
+
         const ox = bx + nx * ordinate;
         const oy = by + ny * ordinate;
         polyPts.push({ ox, oy, bx, by, val, x: s.x });
@@ -1727,10 +1787,14 @@ export class FtoolCanvasApp {
       }
 
       const unit = isM ? 'kN·m' : 'kN';
-      this.drawDiagramValueBadge(ctx, polyPts[0].ox, polyPts[0].oy, valStart, unit, strokeColor);
-      this.drawDiagramValueBadge(ctx, polyPts[polyPts.length - 1].ox, polyPts[polyPts.length - 1].oy, valEnd, unit, strokeColor);
+      // Indent start/end badges slightly along the curve so they don't collide with nodes/supports
+      const startBadgeIdx = Math.min(polyPts.length - 1, Math.max(1, Math.round(polyPts.length * 0.08)));
+      const endBadgeIdx = Math.max(0, Math.min(polyPts.length - 2, Math.round(polyPts.length * 0.92)));
 
-      if (peakIdx > 1 && peakIdx < polyPts.length - 2 && peakAbs > 0.05) {
+      this.drawDiagramValueBadge(ctx, polyPts[startBadgeIdx].ox, polyPts[startBadgeIdx].oy, valStart, unit, strokeColor);
+      this.drawDiagramValueBadge(ctx, polyPts[endBadgeIdx].ox, polyPts[endBadgeIdx].oy, valEnd, unit, strokeColor);
+
+      if (peakIdx > startBadgeIdx + 2 && peakIdx < endBadgeIdx - 2 && peakAbs > 0.05) {
         this.drawDiagramValueBadge(ctx, polyPts[peakIdx].ox, polyPts[peakIdx].oy, polyPts[peakIdx].val, unit, strokeColor);
       }
     }
@@ -1744,11 +1808,26 @@ export class FtoolCanvasApp {
     const text = `${value > 0 ? '+' : ''}${value.toFixed(1)} ${unit}`;
     ctx.font = 'bold 9px monospace';
     const tw = ctx.measureText(text).width;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.fillRect(x - tw / 2 - 3, y - 6, tw + 6, 12);
+    const bw = tw + 10;
+    const bh = 15;
+
+    // Drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.14)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1.5;
+
+    // Pill background
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, 3);
+    ctx.fill();
+
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - tw / 2 - 3, y - 6, tw + 6, 12);
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1820,55 +1899,56 @@ export class FtoolCanvasApp {
       const node = this.nodes.find((n) => n.id === react.nodeId);
       if (!node) continue;
       const p = this.toScreen(node.x, node.y);
+      const hasSupport = Boolean(node.support);
 
       // Horizontal reaction Rx
       if (Math.abs(react.fx) > 0.01) {
-        const rLen = 42;
+        const rLen = 40;
         const dir = react.fx > 0 ? 1 : -1;
-        const startX = p.x - dir * rLen;
+        const tipX = p.x - dir * 4;
+        const startX = p.x - dir * (rLen + 4);
         const startY = p.y;
 
-        ctx.strokeStyle = '#10b981';
-        ctx.fillStyle = '#10b981';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#059669';
+        ctx.fillStyle = '#059669';
+        ctx.lineWidth = 2.8;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
-        ctx.lineTo(p.x, p.y);
+        ctx.lineTo(tipX, startY);
         ctx.stroke();
-        this.drawArrowHead(ctx, p.x, p.y, dir > 0 ? 0 : Math.PI, 9);
+        this.drawArrowHead(ctx, tipX, startY, dir > 0 ? 0 : Math.PI, 8);
 
-        ctx.font = 'bold 11px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Rx=${Math.abs(react.fx).toFixed(1)}kN`, startX - dir * 10, startY - 6);
+        const rxText = `Rx=${Math.abs(react.fx).toFixed(1)} kN`;
+        this.drawReactionBadge(ctx, rxText, startX - dir * 12, startY - 14);
       }
 
       // Vertical reaction Ry
       if (Math.abs(react.fy) > 0.01) {
-        const rLen = 42;
-        const dir = react.fy > 0 ? -1 : 1; // Screen Y is inverted
+        const isUpward = react.fy > 0;
+        const tipY = isUpward ? (hasSupport ? p.y + 22 : p.y + 4) : (hasSupport ? p.y - 14 : p.y - 4);
+        const startY = isUpward ? (hasSupport ? p.y + 54 : p.y + 38) : (hasSupport ? p.y - 46 : p.y - 38);
         const startX = p.x;
-        const startY = p.y - dir * rLen;
 
-        ctx.strokeStyle = '#10b981';
-        ctx.fillStyle = '#10b981';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#059669';
+        ctx.fillStyle = '#059669';
+        ctx.lineWidth = 2.8;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
-        ctx.lineTo(p.x, p.y);
+        ctx.lineTo(startX, tipY);
         ctx.stroke();
-        this.drawArrowHead(ctx, p.x, p.y, dir < 0 ? -Math.PI / 2 : Math.PI / 2, 9);
+        this.drawArrowHead(ctx, startX, tipY, isUpward ? -Math.PI / 2 : Math.PI / 2, 8);
 
-        ctx.font = 'bold 11px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Ry=${Math.abs(react.fy).toFixed(1)}kN`, startX, startY - dir * 10);
+        const ryText = `Ry=${Math.abs(react.fy).toFixed(1)} kN`;
+        const badgeY = isUpward ? startY + 12 : startY - 12;
+        this.drawReactionBadge(ctx, ryText, startX, badgeY);
       }
 
       // Moment reaction Mz
       if (Math.abs(react.mz) > 0.01) {
-        ctx.strokeStyle = '#10b981';
-        ctx.fillStyle = '#10b981';
-        ctx.lineWidth = 2.5;
-        const r = 24;
+        ctx.strokeStyle = '#059669';
+        ctx.fillStyle = '#059669';
+        ctx.lineWidth = 2.2;
+        const r = 26;
         const isCCW = react.mz > 0;
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, isCCW ? 0.3 * Math.PI : -0.3 * Math.PI, isCCW ? 1.7 * Math.PI : -1.7 * Math.PI, !isCCW);
@@ -1879,11 +1959,39 @@ export class FtoolCanvasApp {
         const ay = p.y + r * Math.sin(endAngle);
         this.drawArrowHead(ctx, ax, ay, endAngle + (isCCW ? Math.PI / 2 : -Math.PI / 2), 7);
 
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText(`Mz=${Math.abs(react.mz).toFixed(1)}kN·m`, p.x, p.y - r - 8);
+        const mzText = `Mz=${Math.abs(react.mz).toFixed(1)} kN·m`;
+        this.drawReactionBadge(ctx, mzText, p.x, p.y - r - 12);
       }
     }
 
+    ctx.restore();
+  }
+
+  drawReactionBadge(ctx, text, x, y) {
+    ctx.save();
+    ctx.font = 'bold 10px monospace';
+    const tw = ctx.measureText(text).width;
+    const bw = tw + 10;
+    const bh = 16;
+
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1;
+
+    ctx.fillStyle = '#ecfdf5';
+    ctx.beginPath();
+    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, 3);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#065f46';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
     ctx.restore();
   }
 
@@ -1948,31 +2056,48 @@ export class FtoolCanvasApp {
       `;
     } else if (this.currentTab === 'releases') {
       const curRelease = selectedMember?.release || 'none';
+      const isNodeHinged = Boolean(selectedNode?.hinged || selectedNode?.joint === 'articulado');
+
       html = `
         <div class="ftool-group">
-          <p class="ftool-group-title">Articulação das Barras (Rótulas)</p>
-          <p style="font-size:11px;color:var(--ink-soft);margin:0;">
-            ${selectedMember ? `Barra selecionada: <strong>${selectedMember.name || selectedMember.id}</strong>` : 'Selecione uma barra para configurar rótulas.'}
+          <p class="ftool-group-title">Rótula no Nó (Articulação Nodal)</p>
+          <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px 0;">
+            ${selectedNode ? `Nó selecionado: <strong>${selectedNode.name || selectedNode.id}</strong> (X=${selectedNode.x.toFixed(2)}, Y=${selectedNode.y.toFixed(2)})` : 'Selecione um <strong>nó no canvas</strong> para torná-lo articulado ou rígido.'}
           </p>
+          <div class="ftool-form-row">
+            <label><input type="radio" name="nodeHingeType" value="rigido" ${!isNodeHinged ? 'checked' : ''} ${!selectedNode ? 'disabled' : ''} /> Nó Rígido (Transmite momento)</label>
+          </div>
+          <div class="ftool-form-row">
+            <label><input type="radio" name="nodeHingeType" value="articulado" ${isNodeHinged ? 'checked' : ''} ${!selectedNode ? 'disabled' : ''} /> Nó Articulado (Rótula no nó: M = 0)</label>
+          </div>
+          <div class="ftool-apply-row">
+            <button type="button" class="primary-button compact-button" id="ftoolApplyNodeHingeBtn" ${!selectedNode ? 'disabled' : ''}>
+              ${isNodeHinged ? 'Tornar Nó Rígido' : 'Inserir Rótula no Nó'}
+            </button>
+          </div>
         </div>
 
         <div class="ftool-group">
+          <p class="ftool-group-title">Rótula nas Barras (Extremidade)</p>
+          <p style="font-size:11px;color:var(--ink-soft);margin:0 0 8px 0;">
+            ${selectedMember ? `Barra selecionada: <strong>${selectedMember.name || selectedMember.id}</strong>` : 'Selecione uma <strong>barra no canvas</strong> para configurar liberação de rotação.'}
+          </p>
           <div class="ftool-form-row">
-            <label><input type="radio" name="memberRelease" value="none" ${curRelease === 'none' ? 'checked' : ''} /> Sem Articulação (Rígida-Rígida)</label>
+            <label><input type="radio" name="memberRelease" value="none" ${curRelease === 'none' ? 'checked' : ''} ${!selectedMember ? 'disabled' : ''} /> Sem Articulação (Rígida-Rígida)</label>
           </div>
           <div class="ftool-form-row">
-            <label><input type="radio" name="memberRelease" value="both" ${curRelease === 'both' ? 'checked' : ''} /> Rótulas nas Duas Extremidades (Treliça)</label>
+            <label><input type="radio" name="memberRelease" value="both" ${curRelease === 'both' ? 'checked' : ''} ${!selectedMember ? 'disabled' : ''} /> Rótulas nas Duas Extremidades (Treliça)</label>
           </div>
           <div class="ftool-form-row">
-            <label><input type="radio" name="memberRelease" value="start" ${curRelease === 'start' ? 'checked' : ''} /> Rótula apenas no Início</label>
+            <label><input type="radio" name="memberRelease" value="start" ${curRelease === 'start' ? 'checked' : ''} ${!selectedMember ? 'disabled' : ''} /> Rótula apenas no Início</label>
           </div>
           <div class="ftool-form-row">
-            <label><input type="radio" name="memberRelease" value="end" ${curRelease === 'end' ? 'checked' : ''} /> Rótula apenas no Fim</label>
+            <label><input type="radio" name="memberRelease" value="end" ${curRelease === 'end' ? 'checked' : ''} ${!selectedMember ? 'disabled' : ''} /> Rótula apenas no Fim</label>
           </div>
 
           <div class="ftool-apply-row">
             <button type="button" class="primary-button compact-button" id="ftoolApplyReleaseSelectedBtn" ${!selectedMember ? 'disabled' : ''}>
-              Aplicar à Selecionada
+              Aplicar à Barra
             </button>
             <button type="button" class="outline-button compact-button" id="ftoolApplyReleaseAllBtn">
               Aplicar a Todas
@@ -2119,6 +2244,31 @@ export class FtoolCanvasApp {
         this.updateRightPanel();
       });
     }
+
+    // Node Hinge apply
+    const applyNodeHingeBtn = tabEl.querySelector('#ftoolApplyNodeHingeBtn');
+    if (applyNodeHingeBtn && selectedNode) {
+      applyNodeHingeBtn.addEventListener('click', () => {
+        selectedNode.hinged = !selectedNode.hinged;
+        selectedNode.joint = selectedNode.hinged ? 'articulado' : 'rigido';
+        this.pushHistory();
+        this.solve();
+        this.render();
+        this.updateRightPanel();
+      });
+    }
+
+    tabEl.querySelectorAll('input[name="nodeHingeType"]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        if (!selectedNode) return;
+        selectedNode.hinged = radio.value === 'articulado';
+        selectedNode.joint = selectedNode.hinged ? 'articulado' : 'rigido';
+        this.pushHistory();
+        this.solve();
+        this.render();
+        this.updateRightPanel();
+      });
+    });
 
     // Release apply
     const applyRelSelBtn = tabEl.querySelector('#ftoolApplyReleaseSelectedBtn');

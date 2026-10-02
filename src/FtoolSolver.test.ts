@@ -156,3 +156,31 @@ test("Carga distribuída linear / trapezoidal", () => {
   assert.ok(Math.abs(rb.fy - 60) < 1e-2, `Rb deve ser 60 kN, obtido ${rb.fy}`);
 });
 
+test("Rótula no nó libera momento fletor nas barras conectadas", () => {
+  // Beam with 2 spans: A(0,0) fixed, B(4,0) hinged node, C(8,0) roller
+  // Load at B: Fy = -20 kN
+  const model: FtoolModel = {
+    nodes: [
+      { id: "A", x: 0, y: 0, support: { fixX: true, fixY: true, fixRz: true } },
+      { id: "B", x: 4, y: 0, hinged: true },
+      { id: "C", x: 8, y: 0, support: { fixY: true } },
+    ],
+    members: [
+      { id: "AB", startNodeId: "A", endNodeId: "B" },
+      { id: "BC", startNodeId: "B", endNodeId: "C" },
+    ],
+    nodalLoads: [
+      { nodeId: "B", fx: 0, fy: -20, mz: 0 },
+    ],
+  };
+
+  const res = FtoolSolver.solve(model);
+  const mAB = res.memberResults.find((m) => m.memberId === "AB")!;
+  const mBC = res.memberResults.find((m) => m.memberId === "BC")!;
+
+  const mEndAB = mAB.samples[mAB.samples.length - 1].M;
+  const mStartBC = mBC.samples[0].M;
+  assert.ok(Math.abs(mEndAB) < 1e-4, `Momento no fim de AB na rótula deve ser 0, obtido ${mEndAB}`);
+  assert.ok(Math.abs(mStartBC) < 1e-4, `Momento no início de BC na rótula deve ser 0, obtido ${mStartBC}`);
+});
+

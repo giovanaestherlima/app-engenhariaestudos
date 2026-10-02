@@ -524,7 +524,7 @@ function extractModelFromFtool() {
       name: n.name || n.id,
       x: n.x,
       y: n.y,
-      joint: 'rigido',
+      joint: n.hinged || n.joint === 'articulado' ? 'articulado' : 'rigido',
       support: n.support?.fixX && n.support?.fixY && n.support?.fixRz ? 'engaste'
         : n.support?.fixX && n.support?.fixY ? 'articulado'
         : n.support?.fixY ? 'rolete'

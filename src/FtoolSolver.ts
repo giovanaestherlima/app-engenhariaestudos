@@ -2,6 +2,8 @@ export interface FtoolNode {
   id: string;
   x: number; // m
   y: number; // m
+  hinged?: boolean;
+  joint?: "rigido" | "articulado";
   support?: {
     fixX?: boolean;
     fixY?: boolean;
@@ -227,7 +229,9 @@ export class FtoolSolver {
       const A = sec.A;
       const I = sec.I;
 
-      const release = mem.release || "none";
+      const relStart = (mem.release === "start" || mem.release === "both") || Boolean(n1.hinged || n1.joint === "articulado");
+      const relEnd = (mem.release === "end" || mem.release === "both") || Boolean(n2.hinged || n2.joint === "articulado");
+      const release: MemberRelease = relStart && relEnd ? "both" : relStart ? "start" : relEnd ? "end" : "none";
 
       // Build local stiffness matrix 6x6 based on end releases
       const ke_local = Array.from({ length: 6 }, () => new Array(6).fill(0));
