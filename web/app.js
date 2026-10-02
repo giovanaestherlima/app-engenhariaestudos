@@ -1,5 +1,6 @@
 import { calculateFrame } from './calculator.js';
 import { createDemoModel, readCalculationModel, renderCalculationView } from './calculation-view.js';
+import { FtoolCanvasApp } from './ftool-canvas.js';
 
 const icons = {
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
@@ -583,39 +584,31 @@ function filterSummarySections() {
 function renderStructures() {
   return `<div class="page-wrap">
     <nav class="breadcrumb"><button type="button" data-action="go-home">Início</button>${icon('arrow')}<span>Estruturas</span></nav>
-    <div class="page-heading"><div><p class="eyebrow">Ferramentas de estruturas</p><h1>Escolha como começar</h1><p class="lede">Modele uma estrutura, confira o equilíbrio e visualize os diagramas ou registre um esboço.</p></div></div>
+    <div class="page-heading"><div><p class="eyebrow">Ferramentas de estruturas</p><h1>Escolha como começar</h1><p class="lede">Modele uma estrutura, desenhe diretamente no canvas com estilo Ftool ou envie uma foto de referência.</p></div></div>
     <div class="structure-options structure-options-three">
-      <button class="option-card" type="button" data-action="open-calculator"><span class="option-icon">${icon('structure')}</span><h2>Modelar e calcular</h2><p>Informe nós, barras, apoios e cargas</p></button>
-      <button class="option-card" type="button" data-action="open-canvas"><span class="option-icon">${icon('pencil')}</span><h2>Desenhar estrutura</h2><p>Faça um esboço no canvas</p></button>
+      <button class="option-card" type="button" data-action="open-canvas"><span class="option-icon">${icon('pencil')}</span><h2>Desenho Interativo (Ftool 2D)</h2><p>Grelha, snap magnético, apoios, cargas e diagramas N, V, M instantâneos</p></button>
+      <button class="option-card" type="button" data-action="open-calculator"><span class="option-icon">${icon('structure')}</span><h2>Modelar em Tabela</h2><p>Informe nós, barras, apoios e cargas via formulário</p></button>
       <button class="option-card" type="button" data-action="open-upload"><span class="option-icon">${icon('camera')}</span><h2>Foto e cálculo</h2><p>Use a imagem como referência do modelo</p></button>
     </div>
   </div>`;
 }
 
 function renderCanvas() {
-  return `<div class="page-wrap">
-    <nav class="breadcrumb"><button type="button" data-action="go-home">Início</button>${icon('arrow')}<button type="button" data-action="open-structures">Estruturas</button>${icon('arrow')}<span>Desenhar</span></nav>
-    <div class="page-heading"><div><p class="eyebrow">Esboço estrutural</p><h1>Desenhar estrutura</h1><p class="lede">Rabisque geometria, apoios e carregamentos. O desenho pode ser exportado como imagem.</p></div><div class="heading-actions"><button class="outline-button" type="button" data-action="open-structures">Voltar</button></div></div>
-    <div class="draw-layout">
-      <div class="drawing-board"><canvas id="drawingCanvas" aria-label="Área de desenho estrutural"></canvas><div class="board-actions"><button class="outline-button" type="button" data-action="clear-canvas">Limpar</button></div></div>
-      <aside class="tool-panel">
-        <div class="tool-group"><p class="tool-group-label">Ferramentas</p><div class="tool-row">
-          ${toolButton('pencil', 'Lápis', 'pencil')}${toolButton('line', 'Linha', 'line')}${toolButton('eraser', 'Borracha', 'eraser')}
-          ${toolButton('undo', 'Desfazer', 'undo')}${toolButton('redo', 'Refazer', 'redo')}
-        </div></div>
-        <div class="tool-group"><p class="tool-group-label">Traço</p><div class="swatches">
-          ${['#175b8d','#13b99c','#df7458','#35414b','#e2a12e','#ffffff'].map((color) => `<button class="swatch ${color === state.color ? 'active' : ''}" type="button" style="background:${color}" aria-label="Cor ${color}" data-action="set-color" data-color="${color}"></button>`).join('')}
-        </div></div>
-        <p class="canvas-hint">Use o dedo ou o mouse para desenhar. Selecione Linha para traços retos ou Borracha para apagar.</p>
-        <button class="primary-button" type="button" data-action="save-canvas">${icon('download')}Salvar PNG</button>
-      </aside>
+  return `<div class="page-wrap" style="width:min(1240px, 100%);">
+    <nav class="breadcrumb"><button type="button" data-action="go-home">Início</button>${icon('arrow')}<button type="button" data-action="open-structures">Estruturas</button>${icon('arrow')}<span>Módulo Ftool Interativo</span></nav>
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Análise Computacional de Estruturas Planas</p>
+        <h1>Desenho Interativo estilo Ftool</h1>
+        <p class="lede">Grelha configurável com atração magnética (snap), ferramentas de inserção de nós e barras (com Shift para travar a 0°, 45° e 90°), linhas de cota, condições de apoio (1ª e 2ª ordem, engaste e molas), rótulas, cargas e cálculo de diagramas (N, V, M) e deformada.</p>
+      </div>
+      <div class="heading-actions">
+        <button class="outline-button" type="button" data-action="sync-ftool-to-table" title="Preencher o modelo de formulário com a estrutura desenhada">Preencher Tabela</button>
+        <button class="outline-button" type="button" data-action="open-structures">Voltar</button>
+      </div>
     </div>
+    <div id="ftoolStudioMount"></div>
   </div>`;
-}
-
-function toolButton(tool, label, iconName) {
-  const action = tool === 'undo' || tool === 'redo' ? tool : 'set-tool';
-  return `<button class="tool-button ${state.tool === tool ? 'active' : ''}" type="button" data-action="${action}" data-tool="${tool}" aria-label="${label}">${icon(iconName)}<span>${label}</span></button>`;
 }
 
 function renderUpload() {
@@ -653,118 +646,16 @@ function render() {
   if (state.view === 'upload') setupUpload();
 }
 
-function snapshotCanvas(canvas) {
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  return context.getImageData(0, 0, canvas.width, canvas.height);
-}
-
-function commitCanvasHistory(canvas) {
-  state.canvasUndo.push(snapshotCanvas(canvas));
-  if (state.canvasUndo.length > 26) state.canvasUndo.shift();
-  state.canvasRedo = [];
-}
-
 function setupCanvas() {
-  const canvas = document.querySelector('#drawingCanvas');
-  if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const ratio = Math.max(1, window.devicePixelRatio || 1);
-  canvas.width = Math.round(rect.width * ratio);
-  canvas.height = Math.round(rect.height * ratio);
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  context.scale(ratio, ratio);
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, rect.width, rect.height);
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
-  context.lineWidth = 4;
-  context.strokeStyle = state.color;
-  drawStarterFrame(context, rect.width, rect.height);
-  state.canvasUndo = [snapshotCanvas(canvas)];
-  state.canvasRedo = [];
-
-  let drawing = false;
-  let start = null;
-  let beforeStroke = null;
-  const position = (event) => {
-    const box = canvas.getBoundingClientRect();
-    return { x: event.clientX - box.left, y: event.clientY - box.top };
-  };
-
-  canvas.addEventListener('pointerdown', (event) => {
-    drawing = true;
-    canvas.setPointerCapture(event.pointerId);
-    start = position(event);
-    beforeStroke = snapshotCanvas(canvas);
-    context.beginPath();
-    context.moveTo(start.x, start.y);
-    context.strokeStyle = state.tool === 'eraser' ? '#ffffff' : state.color;
-    context.lineWidth = state.tool === 'eraser' ? 22 : 4;
-    if (state.tool === 'pencil') context.lineTo(start.x + .1, start.y + .1), context.stroke();
+  const mount = document.querySelector('#ftoolStudioMount');
+  if (!mount) return;
+  state.ftoolApp = new FtoolCanvasApp(mount, {
+    onModelChange: (model, results) => {
+      // Model updated
+    },
   });
-  canvas.addEventListener('pointermove', (event) => {
-    if (!drawing || !start) return;
-    const current = position(event);
-    if (state.tool === 'line') {
-      context.putImageData(beforeStroke, 0, 0);
-      context.beginPath();
-      context.moveTo(start.x, start.y);
-      context.lineTo(current.x, current.y);
-      context.strokeStyle = state.color;
-      context.lineWidth = 4;
-      context.stroke();
-    } else {
-      context.beginPath();
-      context.moveTo(start.x, start.y);
-      context.lineTo(current.x, current.y);
-      context.strokeStyle = state.tool === 'eraser' ? '#ffffff' : state.color;
-      context.lineWidth = state.tool === 'eraser' ? 22 : 4;
-      context.stroke();
-      start = current;
-    }
-  });
-  const stopDrawing = () => {
-    if (!drawing) return;
-    drawing = false;
-    start = null;
-    commitCanvasHistory(canvas);
-  };
-  canvas.addEventListener('pointerup', stopDrawing);
-  canvas.addEventListener('pointercancel', stopDrawing);
 }
 
-function drawStarterFrame(context, width, height) {
-  const centerX = width * .53;
-  const top = height * .36;
-  const base = height * .67;
-  const left = width * .24;
-  const right = width * .82;
-  context.save();
-  context.strokeStyle = '#205d8c';
-  context.fillStyle = '#13b99c';
-  context.lineWidth = 5;
-  context.lineCap = 'square';
-  context.beginPath();
-  context.moveTo(left, top);
-  context.lineTo(right, top);
-  context.moveTo(centerX, top);
-  context.lineTo(centerX, base);
-  context.stroke();
-  context.fillRect(centerX - 17, base, 34, 8);
-  context.fillRect(right - 17, top - 4, 34, 8);
-  context.beginPath();
-  context.arc(centerX, top, 5, 0, Math.PI * 2);
-  context.fillStyle = '#ffffff';
-  context.fill();
-  context.strokeStyle = '#205d8c';
-  context.lineWidth = 2;
-  context.stroke();
-  context.restore();
-}
-
-function restoreCanvasSnapshot(canvas, snapshot) {
-  if (snapshot) canvas.getContext('2d').putImageData(snapshot, 0, 0);
-}
 
 function setupUpload() {
   const galleryInput = document.querySelector('#galleryInput');
@@ -880,45 +771,54 @@ document.addEventListener('click', (event) => {
     setView('article', state.category);
   }
   if (action === 'back-to-summary') setView('summary', state.category);
-  if (action === 'set-tool') {
-    state.tool = button.dataset.tool;
-    document.querySelectorAll('[data-tool]').forEach((item) => item.classList.toggle('active', item.dataset.tool === state.tool));
-  }
-  if (action === 'set-color') {
-    state.color = button.dataset.color;
-    document.querySelectorAll('[data-color]').forEach((item) => item.classList.toggle('active', item.dataset.color === state.color));
-  }
-  if (action === 'clear-canvas') {
-    const canvas = document.querySelector('#drawingCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    commitCanvasHistory(canvas);
-    showToast('Canvas limpo.');
-  }
-  if (action === 'undo' || action === 'redo') {
-    const canvas = document.querySelector('#drawingCanvas');
-    if (!canvas) return;
-    if (action === 'undo') {
-      if (state.canvasUndo.length < 2) return showToast('Nada para desfazer.');
-      state.canvasRedo.push(state.canvasUndo.pop());
-      restoreCanvasSnapshot(canvas, state.canvasUndo[state.canvasUndo.length - 1]);
-    } else {
-      const snapshot = state.canvasRedo.pop();
-      if (!snapshot) return showToast('Nada para refazer.');
-      state.canvasUndo.push(snapshot);
-      restoreCanvasSnapshot(canvas, snapshot);
+  if (action === 'sync-ftool-to-table') {
+    if (!state.ftoolApp) return;
+    const fNodes = state.ftoolApp.nodes;
+    const fMembers = state.ftoolApp.members;
+    const fLoads = state.ftoolApp.nodalLoads;
+    if (fNodes.length === 0) {
+      showToast('Desenhe a estrutura antes de transferir.');
+      return;
     }
-  }
-  if (action === 'save-canvas') {
-    const canvas = document.querySelector('#drawingCanvas');
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = 'esboco-estrutural.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-    showToast('Esboço exportado em PNG.');
+    state.calculationModel = {
+      nodes: fNodes.map((n) => ({
+        name: n.name || n.id,
+        x: n.x,
+        y: n.y,
+        joint: 'rigido',
+        support: n.support?.fixX && n.support?.fixY && n.support?.fixRz ? 'engaste'
+          : n.support?.fixX && n.support?.fixY ? 'articulado'
+          : n.support?.fixY ? 'rolete'
+          : 'none',
+        reactionAngle: 90,
+      })),
+      bars: fMembers.map((m) => {
+        const n1 = fNodes.find((n) => n.id === m.startNodeId);
+        const n2 = fNodes.find((n) => n.id === m.endNodeId);
+        const dload = m.distributedLoads?.[0];
+        return {
+          name: m.name || m.id,
+          start: n1?.name || n1?.id || '',
+          end: n2?.name || n2?.id || '',
+          qx: dload?.direction === 'global' ? (dload.qxi || 0) : 0,
+          qy: dload?.direction === 'global' ? (dload.qyi || 0) : 0,
+        };
+      }),
+      nodalLoads: fLoads.map((l) => {
+        const n = fNodes.find((node) => node.id === l.nodeId);
+        return {
+          node: n?.name || n?.id || '',
+          fx: l.fx || 0,
+          fy: l.fy || 0,
+          moment: l.mz || 0,
+        };
+      }),
+      pointLoads: [],
+    };
+    state.calculationResults = null;
+    state.calculationError = '';
+    setView('calculator');
+    showToast('Estrutura transferida para o modelo de tabela!');
   }
   if (action === 'open-gallery') document.querySelector('#galleryInput')?.click();
   if (action === 'open-camera') document.querySelector('#cameraInput')?.click();
