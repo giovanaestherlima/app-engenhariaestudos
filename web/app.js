@@ -30,6 +30,12 @@ const icons = {
 
 import { categories, content, topographyDetails, summaryExtras, fullLessons } from './study-data.js';
 
+const initialDemo = createDemoModel();
+let initialResults = null;
+try {
+  initialResults = calculateFrame(initialDemo);
+} catch (e) {}
+
 const state = {
   view: 'home',
   category: 'estruturas',
@@ -39,8 +45,8 @@ const state = {
   canvasUndo: [],
   canvasRedo: [],
   imageUrl: '',
-  calculationModel: createDemoModel(),
-  calculationResults: null,
+  calculationModel: initialDemo,
+  calculationResults: initialResults,
   calculationError: '',
   calcMode: 'reacoes',
   summaryIndex: 0,
@@ -49,6 +55,49 @@ const state = {
   summaryKind: 'todos',
   toastTimer: 0,
 };
+
+function getFtoolModel() {
+  if (!state.ftoolApp) return null;
+  const fNodes = state.ftoolApp.nodes;
+  const fMembers = state.ftoolApp.members;
+  const fLoads = state.ftoolApp.nodalLoads;
+  if (!fNodes || fNodes.length === 0) return null;
+  return {
+    nodes: fNodes.map((n) => ({
+      name: n.name || n.id,
+      x: n.x,
+      y: n.y,
+      joint: 'rigido',
+      support: n.support?.fixX && n.support?.fixY && n.support?.fixRz ? 'engaste'
+        : n.support?.fixX && n.support?.fixY ? 'articulado'
+        : n.support?.fixY ? 'rolete'
+        : 'none',
+      reactionAngle: 90,
+    })),
+    bars: fMembers.map((m) => {
+      const n1 = fNodes.find((n) => n.id === m.startNodeId);
+      const n2 = fNodes.find((n) => n.id === m.endNodeId);
+      const dload = m.distributedLoads?.[0];
+      return {
+        name: m.name || m.id,
+        start: n1?.name || n1?.id || '',
+        end: n2?.name || n2?.id || '',
+        qx: dload?.direction === 'global' ? (dload.qxi || 0) : 0,
+        qy: dload?.direction === 'global' ? (dload.qyi || 0) : 0,
+      };
+    }),
+    nodalLoads: fLoads.map((l) => {
+      const n = fNodes.find((node) => node.id === l.nodeId);
+      return {
+        node: n?.name || n?.id || '',
+        fx: l.fx || 0,
+        fy: l.fy || 0,
+        moment: l.mz || 0,
+      };
+    }),
+    pointLoads: [],
+  };
+}
 
 const mainView = document.querySelector('#mainView');
 const sidebar = document.querySelector('#sidebar');
@@ -88,6 +137,11 @@ function renderSidebar() {
   sidebar.innerHTML = `
     <p class="side-label">Seu caderno</p>
     <button class="side-link ${state.view === 'home' ? 'active' : ''}" type="button" data-action="go-home"><span class="small-icon">${icon('home')}</span>Início</button>
+    <div class="side-divider"></div>
+    <p class="side-label">Ferramentas de Cálculo</p>
+    <button class="side-link ${state.view === 'calculator' && state.calcMode === 'binario' ? 'active' : ''}" type="button" data-action="open-binario"><span class="small-icon">${icon('structure')}</span>Cálculo por Binário</button>
+    <button class="side-link ${state.view === 'canvas' ? 'active' : ''}" type="button" data-action="open-canvas"><span class="small-icon">${icon('pencil')}</span>Desenho Ftool (2D)</button>
+    <button class="side-link ${state.view === 'calculator' && state.calcMode === 'reacoes' ? 'active' : ''}" type="button" data-action="open-calculator"><span class="small-icon">${icon('ruler')}</span>Modelar em Tabela</button>
     <div class="side-divider"></div>
     <p class="side-label">Disciplinas</p>
     ${links}
@@ -309,10 +363,10 @@ function filterSummarySections() {
 function renderStructures() {
   return `<div class="page-wrap">
     <nav class="breadcrumb"><button type="button" data-action="go-home">Início</button>${icon('arrow')}<span>Estruturas</span></nav>
-    <div class="page-heading"><div><p class="eyebrow">Ferramentas de estruturas</p><h1>Escolha como começar</h1><p class="lede">Modele uma estrutura, desenhe diretamente no canvas com estilo Ftool ou envie uma foto de referência.</p></div></div>
+    <div class="page-heading"><div><p class="eyebrow">Ferramentas de estruturas</p><h1>Escolha como começar</h1><p class="lede">Calcule estruturas pelo método de binário e reações, desenhe diretamente no canvas com estilo Ftool ou envie uma foto de referência.</p></div></div>
     <div class="structure-options structure-options-three">
+      <button class="option-card" type="button" data-action="open-binario"><span class="option-icon">${icon('structure')}</span><h2>Cálculo por Binário</h2><p>Memória de cálculo analítica detalhada com linha de raciocínio passo a passo e reações</p></button>
       <button class="option-card" type="button" data-action="open-canvas"><span class="option-icon">${icon('pencil')}</span><h2>Desenho Interativo (Ftool 2D)</h2><p>Grelha, snap magnético, apoios, cargas e diagramas N, V, M instantâneos</p></button>
-      <button class="option-card" type="button" data-action="open-calculator"><span class="option-icon">${icon('structure')}</span><h2>Modelar em Tabela</h2><p>Informe nós, barras, apoios e cargas via formulário</p></button>
       <button class="option-card" type="button" data-action="open-upload"><span class="option-icon">${icon('camera')}</span><h2>Foto e cálculo</h2><p>Use a imagem como referência do modelo</p></button>
     </div>
   </div>`;
@@ -328,6 +382,7 @@ function renderCanvas() {
         <p class="lede">Grelha configurável com atração magnética (snap), ferramentas de inserção de nós e barras (com Shift para travar a 0°, 45° e 90°), linhas de cota, condições de apoio (1ª e 2ª ordem, engaste e molas), rótulas, cargas e cálculo de diagramas (N, V, M) e deformada.</p>
       </div>
       <div class="heading-actions">
+        <button class="primary-button" type="button" data-action="sync-ftool-to-binario" title="Calcular a estrutura desenhada e abrir a Memória de Cálculo por Binário">${icon('structure')}Ver por Binário</button>
         <button class="outline-button" type="button" data-action="sync-ftool-to-table" title="Preencher o modelo de formulário com a estrutura desenhada">Preencher Tabela</button>
         <button class="outline-button" type="button" data-action="open-structures">Voltar</button>
       </div>
@@ -458,6 +513,49 @@ function calculateCurrentModel() {
   }
 }
 
+function extractModelFromFtool() {
+  if (!state.ftoolApp) return null;
+  const fNodes = state.ftoolApp.nodes;
+  const fMembers = state.ftoolApp.members;
+  const fLoads = state.ftoolApp.nodalLoads;
+  if (!fNodes || fNodes.length === 0) return null;
+  return {
+    nodes: fNodes.map((n) => ({
+      name: n.name || n.id,
+      x: n.x,
+      y: n.y,
+      joint: 'rigido',
+      support: n.support?.fixX && n.support?.fixY && n.support?.fixRz ? 'engaste'
+        : n.support?.fixX && n.support?.fixY ? 'articulado'
+        : n.support?.fixY ? 'rolete'
+        : 'none',
+      reactionAngle: 90,
+    })),
+    bars: fMembers.map((m) => {
+      const n1 = fNodes.find((n) => n.id === m.startNodeId);
+      const n2 = fNodes.find((n) => n.id === m.endNodeId);
+      const dload = m.distributedLoads?.[0];
+      return {
+        name: m.name || m.id,
+        start: n1?.name || n1?.id || '',
+        end: n2?.name || n2?.id || '',
+        qx: dload?.direction === 'global' ? (dload.qxi || 0) : 0,
+        qy: dload?.direction === 'global' ? (dload.qyi || 0) : 0,
+      };
+    }),
+    nodalLoads: fLoads.map((l) => {
+      const n = fNodes.find((node) => node.id === l.nodeId);
+      return {
+        node: n?.name || n?.id || '',
+        fx: l.fx || 0,
+        fy: l.fy || 0,
+        moment: l.mz || 0,
+      };
+    }),
+    pointLoads: [],
+  };
+}
+
 document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
@@ -471,15 +569,37 @@ document.addEventListener('click', (event) => {
   if (action === 'open-upload') setView('upload');
   if (action === 'open-calculator') {
     state.calculationModel = createDemoModel();
-    state.calculationResults = null;
-    state.calculationError = '';
+    state.calcMode = 'reacoes';
+    try {
+      state.calculationResults = calculateFrame(state.calculationModel);
+      state.calculationError = '';
+    } catch {
+      state.calculationResults = null;
+    }
     setView('calculator');
+  }
+  if (action === 'open-binario') {
+    state.calculationModel = createDemoModel();
+    state.calcMode = 'binario';
+    try {
+      state.calculationResults = calculateFrame(state.calculationModel);
+      state.calculationError = '';
+    } catch {
+      state.calculationResults = null;
+    }
+    setView('calculator');
+    window.setTimeout(() => document.querySelector('#calculationResults')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
   if (action === 'continue-to-calculation') {
     if (!state.imageUrl) return showToast('Selecione uma foto antes de continuar.');
     state.calculationModel = createDemoModel();
-    state.calculationResults = null;
-    state.calculationError = '';
+    state.calcMode = 'binario';
+    try {
+      state.calculationResults = calculateFrame(state.calculationModel);
+      state.calculationError = '';
+    } catch {
+      state.calculationResults = null;
+    }
     setView('calculator');
   }
   if (['add-node', 'add-bar', 'add-nodal-load', 'add-point-load'].includes(action)) addModelRow(action);
@@ -510,53 +630,41 @@ document.addEventListener('click', (event) => {
   }
   if (action === 'back-to-summary') setView('summary', state.category);
   if (action === 'sync-ftool-to-table') {
-    if (!state.ftoolApp) return;
-    const fNodes = state.ftoolApp.nodes;
-    const fMembers = state.ftoolApp.members;
-    const fLoads = state.ftoolApp.nodalLoads;
-    if (fNodes.length === 0) {
-      showToast('Desenhe a estrutura antes de transferir.');
+    const model = extractModelFromFtool();
+    if (!model) {
+      showToast('Desenhe a estrutura no Ftool antes de transferir.');
       return;
     }
-    state.calculationModel = {
-      nodes: fNodes.map((n) => ({
-        name: n.name || n.id,
-        x: n.x,
-        y: n.y,
-        joint: 'rigido',
-        support: n.support?.fixX && n.support?.fixY && n.support?.fixRz ? 'engaste'
-          : n.support?.fixX && n.support?.fixY ? 'articulado'
-          : n.support?.fixY ? 'rolete'
-          : 'none',
-        reactionAngle: 90,
-      })),
-      bars: fMembers.map((m) => {
-        const n1 = fNodes.find((n) => n.id === m.startNodeId);
-        const n2 = fNodes.find((n) => n.id === m.endNodeId);
-        const dload = m.distributedLoads?.[0];
-        return {
-          name: m.name || m.id,
-          start: n1?.name || n1?.id || '',
-          end: n2?.name || n2?.id || '',
-          qx: dload?.direction === 'global' ? (dload.qxi || 0) : 0,
-          qy: dload?.direction === 'global' ? (dload.qyi || 0) : 0,
-        };
-      }),
-      nodalLoads: fLoads.map((l) => {
-        const n = fNodes.find((node) => node.id === l.nodeId);
-        return {
-          node: n?.name || n?.id || '',
-          fx: l.fx || 0,
-          fy: l.fy || 0,
-          moment: l.mz || 0,
-        };
-      }),
-      pointLoads: [],
-    };
-    state.calculationResults = null;
-    state.calculationError = '';
+    state.calculationModel = model;
+    state.calcMode = 'reacoes';
+    try {
+      state.calculationResults = calculateFrame(model);
+      state.calculationError = '';
+    } catch (e) {
+      state.calculationResults = null;
+      state.calculationError = e instanceof Error ? e.message : 'Erro ao calcular a estrutura.';
+    }
     setView('calculator');
     showToast('Estrutura transferida para o modelo de tabela!');
+  }
+  if (action === 'sync-ftool-to-binario') {
+    const model = extractModelFromFtool();
+    if (!model) {
+      showToast('Desenhe a estrutura no Ftool antes de transferir.');
+      return;
+    }
+    state.calculationModel = model;
+    state.calcMode = 'binario';
+    try {
+      state.calculationResults = calculateFrame(model);
+      state.calculationError = '';
+    } catch (e) {
+      state.calculationResults = null;
+      state.calculationError = e instanceof Error ? e.message : 'Erro ao calcular a estrutura.';
+    }
+    setView('calculator');
+    showToast('Calculado pelo Método dos Binários!');
+    window.setTimeout(() => document.querySelector('#calculationResults')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
   if (action === 'open-gallery') document.querySelector('#galleryInput')?.click();
   if (action === 'open-camera') document.querySelector('#cameraInput')?.click();

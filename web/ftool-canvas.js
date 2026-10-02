@@ -186,6 +186,10 @@ export class FtoolCanvasApp {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               <span>Calcular</span>
             </button>
+            <button type="button" class="primary-button compact-button" data-action="sync-ftool-to-binario" title="Calcular estrutura pelo Método dos Binários com memória passo a passo">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+              <span>Ver por Binário</span>
+            </button>
             <button type="button" class="outline-button compact-button" id="ftoolFitBtn" title="Ajustar visualização à tela">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/></svg>
               <span>Ajustar Zoom</span>
