@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#123c5b" />
+    <meta name="description" content="Caderno de estudos e ferramentas de Engenharia Civil." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <title>EngCivil | Engenharia na palma da mão</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <button class="icon-button menu-toggle" type="button" aria-label="Abrir menu" data-action="toggle-menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <button class="brand" type="button" data-action="go-home" aria-label="EngCivil, início">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><i></i></span>
+          <span class="brand-copy"><strong>EngCivil</strong><small>engenharia na palma da mão</small></span>
+        </button>
+        <div class="topbar-right">
+          <span class="status-pill"><i></i> Caderno de estudos</span>
+          <button class="avatar" type="button" aria-label="Perfil">EC</button>
+        </div>
+      </header>
+
+      <div class="app-body">
+        <aside class="sidebar" id="sidebar" aria-label="Navegação principal"></aside>
+        <button class="drawer-scrim" id="drawerScrim" type="button" aria-label="Fechar menu" data-action="close-menu"></button>
+        <main class="main-content" id="mainView" tabindex="-1"></main>
+      </div>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+</body>
+</html>
