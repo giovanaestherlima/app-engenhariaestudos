@@ -130,7 +130,7 @@ function renderPointLoadRow(load, model) {
   </article>`;
 }
 
-export function renderCalculationView(model, imageUrl, results, errorMessage = '') {
+export function renderCalculationView(model, imageUrl, results, errorMessage = '', calcMode = 'reacoes') {
   const imagePanel = imageUrl
     ? `<figure class="model-photo"><img src="${escapeAttr(imageUrl)}" alt="Foto de referência da estrutura"><figcaption>Imagem de referência, não interpretada automaticamente.</figcaption></figure>`
     : `<div class="model-photo model-photo-empty">Nenhuma foto anexada. O modelo pode ser calculado pela geometria informada.</div>`;
@@ -149,11 +149,11 @@ export function renderCalculationView(model, imageUrl, results, errorMessage = '
         <section class="model-section"><div class="model-section-head"><div><p class="eyebrow">Conectividade e cargas</p><h2>Barras</h2></div><button class="outline-button compact-button" type="button" data-action="add-bar">+ Adicionar barra</button></div><div class="model-rows" id="barRows">${barRows}</div><p class="model-help">qx e qy são cargas uniformes nos eixos globais. Use valores negativos para cargas para a esquerda ou para baixo.</p></section>
         <section class="model-section"><div class="model-section-head"><div><p class="eyebrow">Ações concentradas</p><h2>Cargas nos nós</h2></div><button class="outline-button compact-button" type="button" data-action="add-nodal-load">+ Adicionar carga</button></div><div class="model-rows" id="nodalLoadRows">${loadRows}</div><details class="point-load-details"><summary>Cargas pontuais aplicadas no meio de barras</summary><div class="model-section-head inner-add"><span>Posições locais medidas do nó inicial</span><button class="outline-button compact-button" type="button" data-action="add-point-load">+ Carga na barra</button></div><div class="model-rows" id="pointLoadRows">${pointRows || '<p class="model-help">Nenhuma carga pontual em barra adicionada.</p>'}</div></details></section>
         ${errorMessage ? `<div class="calculation-error" role="alert"><strong>Não foi possível calcular</strong><span>${escapeHtml(errorMessage)}</span></div>` : ''}
-        <div class="model-submit-row"><span>Unidades: m, kN e kN·m</span><button class="primary-button" type="button" data-action="calculate-frame">Calcular reações e diagramas</button></div>
+        <div class="model-submit-row"><span>Unidades: m, kN e kN·m</span><button class="primary-button" type="button" data-action="calculate-frame">Calcular estrutura</button></div>
       </form>
       <aside class="model-aside">${imagePanel}<div class="analysis-panel"><strong>Convenções aplicadas</strong><p>N positivo à tração; cortante positivo com giro horário; momento de viga positivo com tração inferior. Em rótulas, M = 0.</p></div><div class="analysis-panel"><strong>Modelo inicial</strong><p>Os campos começam com um exemplo editável de pórtico. Substitua-o pelos dados conferidos na imagem.</p></div></aside>
     </div>
-    ${results ? renderCalculationResults(results) : ''}
+    ${results ? renderCalculationResults(results, calcMode) : ''}
   </div>`;
 }
 
@@ -184,9 +184,131 @@ function diagramSvg(samples, field, color, unit) {
   return `<div class="diagram-box"><div class="diagram-title"><strong>${field === 'normal' ? 'Normal' : field === 'cortante' ? 'Cortante' : 'Momento fletor'}</strong><span>${unit}</span></div><svg class="diagram-svg" viewBox="0 0 ${width} 130" role="img" aria-label="Diagrama de ${field}"><line x1="${plotLeft}" y1="${baseline}" x2="${plotLeft + plotWidth}" y2="${baseline}" class="diagram-axis"/><path d="${area}" fill="${color}" opacity=".13"/><path d="${line}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><text x="${plotLeft}" y="116" class="diagram-label">0 m</text><text x="${plotLeft + plotWidth}" y="116" text-anchor="end" class="diagram-label">x final</text><text x="${plotLeft + plotWidth / 2}" y="127" text-anchor="middle" class="diagram-extreme">máx ${numberPt(maxPositive)} · mín ${numberPt(minNegative)} ${unit}</text></svg></div>`;
 }
 
-function renderCalculationResults(results) {
+function renderBinaryBarCard(bar) {
+  return `<article class="binary-bar-card">
+    <div class="binary-bar-head">
+      <div>
+        <span class="bar-tag">Barra ${escapeHtml(bar.barName)}</span>
+        <h3>${escapeHtml(bar.startNode)} → ${escapeHtml(bar.endNode)} <small>Vão L = ${numberPt(bar.length)} m · Inclinação θ = ${bar.angleDeg}°</small></h3>
+      </div>
+      <div class="binary-badges">
+        <span class="binary-badge">ΔM = ${numberPt(bar.endMoments.deltaM)} kN·m</span>
+        <span class="binary-badge highlight">V<sub>bin</sub> = ${numberPt(bar.binaryShear)} kN</span>
+        <span class="binary-badge ${bar.axial.status === 'Tração' ? 'tension' : bar.axial.status === 'Compressão' ? 'compression' : ''}">N = ${numberPt(bar.axial.N1)} kN (${bar.axial.status})</span>
+      </div>
+    </div>
+    <div class="binary-metrics-grid">
+      <div class="metric-item">
+        <span>Momento Inicial M(${escapeHtml(bar.startNode)})</span>
+        <strong>${numberPt(bar.endMoments.M1)} <small>kN·m</small></strong>
+      </div>
+      <div class="metric-item">
+        <span>Momento Final M(${escapeHtml(bar.endNode)})</span>
+        <strong>${numberPt(bar.endMoments.M2)} <small>kN·m</small></strong>
+      </div>
+      <div class="metric-item">
+        <span>Binário Transversal V<sub>bin</sub></span>
+        <strong>${numberPt(bar.binaryShear)} <small>kN</small></strong>
+      </div>
+      <div class="metric-item">
+        <span>Cortante Inicial V(${escapeHtml(bar.startNode)})</span>
+        <strong>${numberPt(bar.superposition.V1)} <small>kN</small></strong>
+      </div>
+      <div class="metric-item">
+        <span>Cortante Final V(${escapeHtml(bar.endNode)})</span>
+        <strong>${numberPt(bar.superposition.V2)} <small>kN</small></strong>
+      </div>
+      <div class="metric-item">
+        <span>Momento Crítico no Vão</span>
+        <strong>${numberPt(bar.superposition.extremeMoment)} <small>kN·m</small></strong>
+      </div>
+    </div>
+    <div class="binary-reasoning-wrap">
+      <h4>Linha de Raciocínio Passo a Passo (Cálculo da Barra):</h4>
+      <ol class="binary-reasoning-steps">
+        ${bar.reasoning.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}
+      </ol>
+    </div>
+  </article>`;
+}
+
+function renderCalculationResults(results, calcMode = 'reacoes') {
   const balanceOk = Math.max(Math.abs(results.globalBalance.somaFx), Math.abs(results.globalBalance.somaFy), Math.abs(results.globalBalance.somaMomentos)) < 1e-7;
   const reactions = results.reactions.map((reaction) => `<article class="reaction-card"><div class="reaction-card-head"><strong>Apoio ${escapeHtml(reaction.node)}</strong><span>${reaction.type}</span></div><div class="reaction-values"><div><small>Hx</small><b>${numberPt(reaction.fx)} <i>kN</i></b></div><div><small>Vy</small><b>${numberPt(reaction.fy)} <i>kN</i></b></div><div><small>Ma</small><b>${numberPt(reaction.moment)} <i>kN·m</i></b></div></div></article>`).join('');
   const diagrams = results.diagrams.map((bar) => `<article class="bar-result"><div class="bar-result-head"><div><p class="eyebrow">Barra ${escapeHtml(bar.name)}</p><h3>${escapeHtml(bar.start)} → ${escapeHtml(bar.end)} <small>${numberPt(bar.length)} m</small></h3></div><span class="result-tag">${bar.samples.length} seções</span></div><div class="diagram-grid">${diagramSvg(bar.samples, 'normal', '#205d8c', 'kN')}${diagramSvg(bar.samples, 'cortante', '#13a891', 'kN')}${diagramSvg(bar.samples, 'momento', '#d86d54', 'kN·m')}</div></article>`).join('');
-  return `<section class="calculation-results" id="calculationResults"><div class="results-heading"><div><p class="eyebrow">Resultado do equilíbrio</p><h2>Reações e diagramas</h2><p>Grau de estaticidade g<sub>h</sub> = ${results.degree}; o equilíbrio foi ${balanceOk ? 'satisfeito' : 'verificado com resíduo numérico'}.</p></div><span class="result-badge ${balanceOk ? 'ok' : 'warn'}">${balanceOk ? 'Equilibrado' : 'Confira o modelo'}</span></div><div class="reaction-grid">${reactions}</div><div class="bar-diagrams">${diagrams}</div><details class="balance-details"><summary>Conferir resíduos de equilíbrio</summary><p>ΣFx = ${numberPt(results.globalBalance.somaFx, 6)} kN · ΣFy = ${numberPt(results.globalBalance.somaFy, 6)} kN · ΣM = ${numberPt(results.globalBalance.somaMomentos, 6)} kN·m</p></details></section>`;
+
+  const modeSwitcher = `
+    <div class="calc-mode-switcher" role="tablist" aria-label="Modo de visualização dos cálculos">
+      <button class="mode-toggle-btn ${calcMode === 'reacoes' ? 'active' : ''}" type="button" data-action="set-calc-mode" data-mode="reacoes">
+        ${svgIcon('<path d="M4 20h16M6 20V8h12v12M3 8h18M8 8V4h8v4M9 12v2m6-2v2"/>')}
+        <span>Visualizar por Reações</span>
+      </button>
+      <button class="mode-toggle-btn ${calcMode === 'binario' ? 'active' : ''}" type="button" data-action="set-calc-mode" data-mode="binario">
+        ${svgIcon('<path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10zM14 7l3 3"/>')}
+        <span>Visualizar por Binário (Memória)</span>
+      </button>
+    </div>`;
+
+  if (calcMode === 'binario') {
+    const binaryBars = (results.binaryMemory || []).map(renderBinaryBarCard).join('');
+    const nodalCheck = (results.nodalBalance || []).map((nb) => `
+      <div class="nodal-balance-card">
+        <div class="nodal-balance-head"><strong>Nó ${escapeHtml(nb.no.nome)}</strong><span class="tag">${nb.no.tipoLigacao === 'rotula' ? 'Rótula Interna' : 'Nó Rígido'}</span></div>
+        <p>Resíduo de Momento: <b>${numberPt(nb.somaMomentos, 4)} kN·m</b></p>
+        <p>Resíduo Fx: <b>${numberPt(nb.somaFx, 4)} kN</b> · Fy: <b>${numberPt(nb.somaFy, 4)} kN</b></p>
+        <small>${nb.no.tipoLigacao === 'rotula' ? 'Momento nulo na rótula interna (M = 0).' : 'Os momentos de extremidade das barras concorrentes somam zero (ΣM = 0), transferindo os binários perfeitamente.'}</small>
+      </div>`).join('');
+
+    return `<section class="calculation-results" id="calculationResults">
+      <div class="results-heading">
+        <div>
+          <p class="eyebrow">Memória Didática de Cálculo</p>
+          <h2>Cálculo das Barras por Binário</h2>
+          <p>Linha de raciocínio passo a passo de cada barra pelo equilíbrio de momentos e binários transversais.</p>
+        </div>
+        <span class="result-badge ${balanceOk ? 'ok' : 'warn'}">${balanceOk ? 'Equilíbrio Satisfeito' : 'Confira o modelo'}</span>
+      </div>
+      ${modeSwitcher}
+      <div class="binary-intro-card">
+        <div class="binary-intro-head">
+          <div class="binary-intro-icon">${svgIcon('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>')}</div>
+          <div>
+            <strong>Fundamento do Método por Binário</strong>
+            <p>O equilíbrio à rotação de cada elemento isolado é estabelecido pelo binário de forças de cisalhamento: <code>V<sub>bin</sub> = (M<sub>fim</sub> − M<sub>ini</sub>) / L</code>. Esse binário se superpõe às forças isostáticas das cargas no vão (<code>V(x) = V<sub>0</sub>(x) + V<sub>bin</sub></code>), fornecendo a linha de raciocínio completa para obtenção dos diagramas N, V e M.</p>
+          </div>
+        </div>
+      </div>
+      <div class="binary-bars-list">${binaryBars}</div>
+      <div class="nodal-binary-section">
+        <div class="section-head"><div><p class="eyebrow">Compatibilidade Nodal</p><h3>Equilíbrio dos Nós por Binário</h3></div><span class="result-badge ok">ΣM = 0 nos Nós</span></div>
+        <div class="nodal-balance-grid">${nodalCheck}</div>
+      </div>
+      <div class="bar-diagrams-section">
+        <div class="section-head"><div><p class="eyebrow">Visualização Gráfica</p><h3>Diagramas Estruturais Resultantes</h3></div></div>
+        <div class="bar-diagrams">${diagrams}</div>
+      </div>
+      <details class="balance-details">
+        <summary>Conferir resíduos de equilíbrio global</summary>
+        <p>ΣFx = ${numberPt(results.globalBalance.somaFx, 6)} kN · ΣFy = ${numberPt(results.globalBalance.somaFy, 6)} kN · ΣM = ${numberPt(results.globalBalance.somaMomentos, 6)} kN·m</p>
+      </details>
+    </section>`;
+  }
+
+  return `<section class="calculation-results" id="calculationResults">
+    <div class="results-heading">
+      <div>
+        <p class="eyebrow">Resultado do equilíbrio</p>
+        <h2>Reações e diagramas</h2>
+        <p>Grau de estaticidade g<sub>h</sub> = ${results.degree}; o equilíbrio foi ${balanceOk ? 'satisfeito' : 'verificado com resíduo numérico'}.</p>
+      </div>
+      <span class="result-badge ${balanceOk ? 'ok' : 'warn'}">${balanceOk ? 'Equilibrado' : 'Confira o modelo'}</span>
+    </div>
+    ${modeSwitcher}
+    <div class="reaction-grid">${reactions}</div>
+    <div class="bar-diagrams">${diagrams}</div>
+    <details class="balance-details">
+      <summary>Conferir resíduos de equilíbrio global</summary>
+      <p>ΣFx = ${numberPt(results.globalBalance.somaFx, 6)} kN · ΣFy = ${numberPt(results.globalBalance.somaFy, 6)} kN · ΣM = ${numberPt(results.globalBalance.somaMomentos, 6)} kN·m</p>
+    </details>
+  </section>`;
 }
