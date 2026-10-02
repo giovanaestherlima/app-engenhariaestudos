@@ -1522,9 +1522,11 @@ export class FtoolCanvasApp {
       const ny = Math.cos(barAngle);
 
       for (const dload of mem.distributedLoads) {
+        const qx1 = dload.qxi ?? 0;
+        const qx2 = dload.qxj ?? qx1;
         const qy1 = dload.qyi ?? 0;
         const qy2 = dload.qyj ?? qy1;
-        if (Math.abs(qy1) < 1e-4 && Math.abs(qy2) < 1e-4) continue;
+        if (Math.abs(qx1) < 1e-4 && Math.abs(qx2) < 1e-4 && Math.abs(qy1) < 1e-4 && Math.abs(qy2) < 1e-4) continue;
 
         const maxH = 26;
         const numArrows = Math.max(3, Math.round(Lscreen / 25));
@@ -1536,16 +1538,30 @@ export class FtoolCanvasApp {
         // Top line points
         const topPts = [];
 
+        // Check if load is primarily global X (horizontal) or normal/Y
+        const isGlobalX = Math.abs(qx1) > 1e-4 || Math.abs(qx2) > 1e-4;
+
         for (let i = 0; i <= numArrows; i++) {
           const t = i / numArrows;
-          const qVal = qy1 + (qy2 - qy1) * t;
-          const sign = qVal < 0 ? 1 : -1; // q < 0 pushes down
-          const arrowHeight = (Math.abs(qVal) / (Math.max(Math.abs(qy1), Math.abs(qy2)) || 1)) * maxH;
-
           const bx = p1.x + t * dx;
           const by = p1.y + t * dy;
-          const tx = bx - nx * arrowHeight * sign;
-          const ty = by - ny * arrowHeight * sign;
+
+          let tx = bx;
+          let ty = by;
+
+          if (isGlobalX) {
+            const qxVal = qx1 + (qx2 - qx1) * t;
+            const signX = qxVal > 0 ? -1 : 1; // qx > 0 points right (toward +X), arrow starts to left
+            const arrowLen = (Math.abs(qxVal) / (Math.max(Math.abs(qx1), Math.abs(qx2)) || 1)) * maxH;
+            tx = bx + signX * arrowLen;
+            ty = by;
+          } else {
+            const qyVal = qy1 + (qy2 - qy1) * t;
+            const signY = qyVal < 0 ? 1 : -1; // qy < 0 pushes down
+            const arrowHeight = (Math.abs(qyVal) / (Math.max(Math.abs(qy1), Math.abs(qy2)) || 1)) * maxH;
+            tx = bx - nx * arrowHeight * signY;
+            ty = by - ny * arrowHeight * signY;
+          }
 
           topPts.push({ x: tx, y: ty });
 
@@ -1555,7 +1571,7 @@ export class FtoolCanvasApp {
           ctx.lineTo(bx, by);
           ctx.stroke();
 
-          // Arrowhead pointing to the beam
+          // Arrowhead pointing to the member
           const arrowDir = Math.atan2(by - ty, bx - tx);
           this.drawArrowHead(ctx, bx, by, arrowDir, 6);
         }
@@ -1570,10 +1586,12 @@ export class FtoolCanvasApp {
 
         // Text label with clean pill backdrop
         ctx.font = 'bold 10px monospace';
-        const qText = `q = ${Math.abs(qy1).toFixed(1)} kN/m`;
+        const qMainVal = isGlobalX ? Math.abs(qx1) : Math.abs(qy1);
+        const qPrefix = isGlobalX ? 'qx' : 'qy';
+        const qText = `${qPrefix} = ${qMainVal.toFixed(1)} kN/m`;
         const qtw = ctx.measureText(qText).width;
         const labelPos = topPts[Math.floor(topPts.length / 2)];
-        const qyPos = labelPos.y - 8;
+        const qyPos = isGlobalX ? labelPos.y - 10 : labelPos.y - 8;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         ctx.fillRect(labelPos.x - qtw / 2 - 4, qyPos - 7, qtw + 8, 14);
         ctx.fillStyle = '#205d8c';
@@ -2176,11 +2194,19 @@ export class FtoolCanvasApp {
             </select>
           </div>
           <div class="ftool-form-row">
-            <label>qy inicial (kN/m):</label>
+            <label>qx inicial (kN/m) [Horizontal]:</label>
+            <input type="number" class="ftool-input" id="ftoolDistQx1" value="${distLoad?.qxi || 0}" step="5" />
+          </div>
+          <div class="ftool-form-row">
+            <label>qx final (kN/m) [Horizontal]:</label>
+            <input type="number" class="ftool-input" id="ftoolDistQx2" value="${distLoad?.qxj ?? distLoad?.qxi ?? 0}" step="5" />
+          </div>
+          <div class="ftool-form-row">
+            <label>qy inicial (kN/m) [Vertical]:</label>
             <input type="number" class="ftool-input" id="ftoolDistQy1" value="${distLoad?.qyi || 0}" step="5" />
           </div>
           <div class="ftool-form-row">
-            <label>qy final (kN/m):</label>
+            <label>qy final (kN/m) [Vertical]:</label>
             <input type="number" class="ftool-input" id="ftoolDistQy2" value="${distLoad?.qyj ?? distLoad?.qyi ?? 0}" step="5" />
           </div>
           <div class="ftool-apply-row">
@@ -2365,12 +2391,18 @@ export class FtoolCanvasApp {
     if (applyDistLoadBtn && selectedMember) {
       applyDistLoadBtn.addEventListener('click', () => {
         const dir = tabEl.querySelector('#ftoolDistDir').value;
+        const qxi = parseFloat(tabEl.querySelector('#ftoolDistQx1').value) || 0;
+        const qxj = parseFloat(tabEl.querySelector('#ftoolDistQx2').value) || 0;
         const qyi = parseFloat(tabEl.querySelector('#ftoolDistQy1').value) || 0;
         const qyj = parseFloat(tabEl.querySelector('#ftoolDistQy2').value) || 0;
 
-        selectedMember.distributedLoads = [
-          { direction: dir, qxi: 0, qxj: 0, qyi, qyj },
-        ];
+        if (qxi === 0 && qxj === 0 && qyi === 0 && qyj === 0) {
+          selectedMember.distributedLoads = [];
+        } else {
+          selectedMember.distributedLoads = [
+            { direction: dir, qxi, qxj, qyi, qyj },
+          ];
+        }
         this.pushHistory();
         this.solve();
         this.render();

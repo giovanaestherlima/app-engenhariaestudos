@@ -541,13 +541,31 @@ function extractModelFromFtool() {
       const n1 = fNodes.find((n) => n.id === m.startNodeId);
       const n2 = fNodes.find((n) => n.id === m.endNodeId);
       const dload = m.distributedLoads?.[0];
+      let qx = 0;
+      let qy = 0;
+      if (dload && n1 && n2) {
+        if (dload.direction === 'local') {
+          const dx = n2.x - n1.x;
+          const dy = n2.y - n1.y;
+          const L = Math.hypot(dx, dy) || 1;
+          const cos = dx / L;
+          const sin = dy / L;
+          const q_axial = dload.qxi || 0;
+          const q_trans = dload.qyi || 0;
+          qx = q_axial * cos - q_trans * sin;
+          qy = q_axial * sin + q_trans * cos;
+        } else {
+          qx = dload.qxi || 0;
+          qy = dload.qyi || 0;
+        }
+      }
       return {
         name: m.name || m.id,
         start: n1?.name || n1?.id || '',
         end: n2?.name || n2?.id || '',
         release: m.release || 'none',
-        qx: dload?.direction === 'global' ? (dload.qxi || 0) : 0,
-        qy: dload?.direction === 'global' ? (dload.qyi || 0) : 0,
+        qx,
+        qy,
       };
     }),
     nodalLoads: fLoads.map((l) => {
