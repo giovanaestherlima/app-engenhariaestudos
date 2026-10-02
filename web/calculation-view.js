@@ -232,6 +232,116 @@ function renderBinaryBarCard(bar) {
   </article>`;
 }
 
+function renderCompositeAnalysis(composite) {
+  if (!composite) return '';
+  
+  const classification = composite.classification;
+  let html = `<div class="composite-analysis">`;
+  
+  if (classification) {
+    html += `
+      <div class="composite-section">
+        <div class="composite-section-head">
+          <div><p class="eyebrow">Classificação</p><h3>Análise Isostática</h3></div>
+          <span class="composite-badge ${classification.isIsostatic ? 'ok' : 'warn'}">${classification.isIsostatic ? 'Isostática' : 'Não Isostática'}</span>
+        </div>
+        <div class="composite-card">
+          <p>Reações totais (r): ${classification.totalReactions} | Rótulas internas (n): ${classification.internalHinges}</p>
+          <p>Fórmula: ${escapeHtml(classification.formula)}</p>
+          <ol class="composite-step">
+            ${(classification.reasoning || []).map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+          </ol>
+        </div>
+      </div>`;
+  }
+
+  if (composite.pendularBars && composite.pendularBars.length > 0) {
+    html += `
+      <div class="composite-section">
+        <div class="composite-section-head">
+          <div><p class="eyebrow">Simplificação</p><h3>Barras Pendulares (Bielas)</h3></div>
+        </div>
+        <div class="composite-grid">
+          ${composite.pendularBars.map(bar => `
+            <div class="composite-pendular-card">
+              <h4>Barra ${escapeHtml(bar.barName)} (${escapeHtml(bar.startNode)} → ${escapeHtml(bar.endNode)})</h4>
+              <p>Direção: ${escapeHtml(bar.direction)} | Ângulo: ${numberPt(bar.angle)}°</p>
+              <p>Força Axial: <strong>${numberPt(bar.axialForce)} kN</strong></p>
+              <p>Natureza: <span class="composite-badge ${bar.nature === 'Tracionada' ? 'tension' : 'compression'}">${escapeHtml(bar.nature)}</span></p>
+              <ol class="composite-step">
+                ${(bar.reasoning || []).map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+              </ol>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  if (composite.parts && composite.parts.length > 0) {
+    html += `
+      <div class="composite-section">
+        <div class="composite-section-head">
+          <div><p class="eyebrow">Decomposição</p><h3>Partes da Estrutura</h3></div>
+        </div>
+        <div class="composite-grid">
+          ${composite.parts.map(part => `
+            <div class="composite-part-card">
+              <h4>${escapeHtml(part.name)}</h4>
+              <span class="composite-badge ${part.type === 'secundaria' ? 'secondary' : 'principal'}">${part.type === 'secundaria' ? 'Secundária' : 'Principal'}</span>
+              <p>Nós: ${escapeHtml(part.nodes.join(', '))} | Barras: ${escapeHtml(part.bars.join(', '))}</p>
+              <p>Reações a determinar: ${part.realReactions}</p>
+              <ol class="composite-step">
+                ${(part.reasoning || []).map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+              </ol>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  if (composite.hingeForces && composite.hingeForces.length > 0) {
+    html += `
+      <div class="composite-section">
+        <div class="composite-section-head">
+          <div><p class="eyebrow">Interação</p><h3>Forças nas Rótulas (Ação e Reação)</h3></div>
+        </div>
+        <div class="composite-grid">
+          ${composite.hingeForces.map(hinge => `
+            <div class="composite-hinge-card">
+              <h4>Rótula ${escapeHtml(hinge.hingeName)}</h4>
+              <p>Hx = ${numberPt(hinge.H)} kN | Vy = ${numberPt(hinge.V)} kN</p>
+              <ol class="composite-step">
+                ${(hinge.reasoning || []).map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+              </ol>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  if (composite.verification) {
+    const v = composite.verification;
+    const ok = v.hingeCheckOk && v.nodalCheckOk;
+    html += `
+      <div class="composite-section composite-verification">
+        <div class="composite-section-head">
+          <div><p class="eyebrow">Verificação</p><h3>Checagem Global do Pórtico Composto</h3></div>
+          <span class="composite-badge ${ok ? 'ok' : 'warn'}">${ok ? 'Verificado' : 'Aviso'}</span>
+        </div>
+        <div class="composite-card">
+          <p>Resíduos: ΣFx = ${numberPt(v.globalFx, 4)} kN, ΣFy = ${numberPt(v.globalFy, 4)} kN, ΣM = ${numberPt(v.globalM, 4)} kN·m</p>
+          <p>Checagem de Rótula: ${v.hingeCheckOk ? 'OK' : 'Falhou'} | Checagem Nodal: ${v.nodalCheckOk ? 'OK' : 'Falhou'}</p>
+          <ol class="composite-step">
+            ${(v.reasoning || []).map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+          </ol>
+        </div>
+      </div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
 function renderCalculationResults(results, calcMode = 'reacoes') {
   const balanceOk = Math.max(Math.abs(results.globalBalance.somaFx), Math.abs(results.globalBalance.somaFy), Math.abs(results.globalBalance.somaMomentos)) < 1e-7;
   const reactions = results.reactions.map((reaction) => `<article class="reaction-card"><div class="reaction-card-head"><strong>Apoio ${escapeHtml(reaction.node)}</strong><span>${reaction.type}</span></div><div class="reaction-values"><div><small>Hx</small><b>${numberPt(reaction.fx)} <i>kN</i></b></div><div><small>Vy</small><b>${numberPt(reaction.fy)} <i>kN</i></b></div><div><small>Ma</small><b>${numberPt(reaction.moment)} <i>kN·m</i></b></div></div></article>`).join('');
@@ -259,16 +369,19 @@ function renderCalculationResults(results, calcMode = 'reacoes') {
         <small>${nb.no.tipoLigacao === 'rotula' ? 'Momento nulo na rótula interna (M = 0).' : 'Os momentos de extremidade das barras concorrentes somam zero (ΣM = 0), transferindo os binários perfeitamente.'}</small>
       </div>`).join('');
 
+    const hasComposite = results.compositeAnalysis != null;
+
     return `<section class="calculation-results" id="calculationResults">
       <div class="results-heading">
         <div>
-          <p class="eyebrow">Memória Didática de Cálculo</p>
+          <p class="eyebrow">${hasComposite ? 'Análise de Pórtico Isostático Composto' : 'Memória Didática de Cálculo'}</p>
           <h2>Cálculo das Barras por Binário</h2>
           <p>Linha de raciocínio passo a passo de cada barra pelo equilíbrio de momentos e binários transversais.</p>
         </div>
         <span class="result-badge ${balanceOk ? 'ok' : 'warn'}">${balanceOk ? 'Equilíbrio Satisfeito' : 'Confira o modelo'}</span>
       </div>
       ${modeSwitcher}
+      ${hasComposite ? renderCompositeAnalysis(results.compositeAnalysis) : ''}
       <div class="binary-intro-card">
         <div class="binary-intro-head">
           <div class="binary-intro-icon">${svgIcon('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>')}</div>

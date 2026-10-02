@@ -1,4 +1,4 @@
-import { calculateFrame } from './calculator.js';
+import { calculateFrame, addCompositeAnalysis } from './calculator.js';
 import { createDemoModel, readCalculationModel, renderCalculationView } from './calculation-view.js';
 import { FtoolCanvasApp } from './ftool-canvas.js';
 
@@ -33,8 +33,14 @@ import { categories, content, topographyDetails, summaryExtras, fullLessons } fr
 const initialDemo = createDemoModel();
 let initialResults = null;
 try {
-  initialResults = calculateFrame(initialDemo);
+  initialResults = addCompositeAnalysis(initialDemo, calculateFrame(initialDemo));
 } catch (e) {}
+
+/** Helper: run calculation + composite analysis in one call. */
+function calcWithComposite(model) {
+  const results = calculateFrame(model);
+  return addCompositeAnalysis(model, results);
+}
 
 const state = {
   view: 'home',
@@ -502,7 +508,7 @@ function calculateCurrentModel() {
   const model = saveCalculationModelFromForm();
   state.calculationModel = model;
   try {
-    state.calculationResults = calculateFrame(model);
+    state.calculationResults = calcWithComposite(model);
     state.calculationError = '';
     render();
     window.setTimeout(() => document.querySelector('#calculationResults')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
@@ -571,7 +577,7 @@ document.addEventListener('click', (event) => {
     state.calculationModel = createDemoModel();
     state.calcMode = 'reacoes';
     try {
-      state.calculationResults = calculateFrame(state.calculationModel);
+      state.calculationResults = calcWithComposite(state.calculationModel);
       state.calculationError = '';
     } catch {
       state.calculationResults = null;
@@ -582,7 +588,7 @@ document.addEventListener('click', (event) => {
     state.calculationModel = createDemoModel();
     state.calcMode = 'binario';
     try {
-      state.calculationResults = calculateFrame(state.calculationModel);
+      state.calculationResults = calcWithComposite(state.calculationModel);
       state.calculationError = '';
     } catch {
       state.calculationResults = null;
@@ -595,7 +601,7 @@ document.addEventListener('click', (event) => {
     state.calculationModel = createDemoModel();
     state.calcMode = 'binario';
     try {
-      state.calculationResults = calculateFrame(state.calculationModel);
+      state.calculationResults = calcWithComposite(state.calculationModel);
       state.calculationError = '';
     } catch {
       state.calculationResults = null;
@@ -638,7 +644,7 @@ document.addEventListener('click', (event) => {
     state.calculationModel = model;
     state.calcMode = 'reacoes';
     try {
-      state.calculationResults = calculateFrame(model);
+      state.calculationResults = calcWithComposite(model);
       state.calculationError = '';
     } catch (e) {
       state.calculationResults = null;
@@ -656,7 +662,7 @@ document.addEventListener('click', (event) => {
     state.calculationModel = model;
     state.calcMode = 'binario';
     try {
-      state.calculationResults = calculateFrame(model);
+      state.calculationResults = calcWithComposite(model);
       state.calculationError = '';
     } catch (e) {
       state.calculationResults = null;

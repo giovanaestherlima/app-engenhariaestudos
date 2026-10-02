@@ -1,4 +1,6 @@
 import { Apoio, Barra, No, Portico } from '../src/Portico.ts';
+import { FtoolSolver } from '../src/FtoolSolver.ts';
+import { analyzeCompositeStructure } from './composite-solver.js';
 
 function finiteNumber(value, label) {
   const number = Number(value);
@@ -6,8 +8,119 @@ function finiteNumber(value, label) {
   return number;
 }
 
+function solveUsingFtool(model, sampleCount = 40) {
+  const fNodes = model.nodes.map((n) => ({
+    id: String(n.name).trim(),
+    x: finiteNumber(n.x, `X do nó ${n.name}`),
+    y: finiteNumber(n.y, `Y do nó ${n.name}`),
+    hinged: n.joint === 'rotula',
+    joint: n.joint === 'rotula' ? 'articulado' : 'rigido',
+    support: n.support === 'engaste' ? { fixX: true, fixY: true, fixRz: true }
+      : n.support === 'articulado' ? { fixX: true, fixY: true }
+      : n.support === 'rolete' ? { fixX: false, fixY: true, angle: (n.reactionAngle ?? 90) - 90 }
+      : undefined,
+  }));
+
+  const fMembers = model.bars.map((b) => {
+    const n1 = model.nodes.find((n) => n.name === b.start);
+    const n2 = model.nodes.find((n) => n.name === b.end);
+    const dloads = [];
+    if (b.qx || b.qy) {
+      dloads.push({
+        direction: 'global',
+        qxi: finiteNumber(b.qx || 0, `qx da barra ${b.name}`),
+        qyi: finiteNumber(b.qy || 0, `qy da barra ${b.name}`),
+      });
+    }
+    return {
+      id: String(b.name).trim(),
+      startNodeId: String(b.start).trim(),
+      endNodeId: String(b.end).trim(),
+      release: b.release || (
+        (n1?.support === 'articulado' || n1?.joint === 'rotula' || n1?.support === 'rolete') &&
+        (n2?.support === 'articulado' || n2?.joint === 'rotula' || n2?.support === 'rolete') &&
+        !b.qx && !b.qy ? 'both' : 'none'
+      ),
+      distributedLoads: dloads,
+    };
+  });
+
+  const fNodalLoads = (model.nodalLoads || []).map((l) => ({
+    nodeId: String(l.node).trim(),
+    fx: finiteNumber(l.fx || 0, `Fx no nó ${l.node}`),
+    fy: finiteNumber(l.fy || 0, `Fy no nó ${l.node}`),
+    mz: finiteNumber(l.moment || 0, `Momento no nó ${l.node}`),
+  }));
+
+  const fRes = FtoolSolver.solve({
+    nodes: fNodes,
+    members: fMembers,
+    nodalLoads: fNodalLoads,
+  }, sampleCount);
+
+  const nodeMap = new Map(model.nodes.map((n) => [String(n.name).trim(), n]));
+  const barMap = new Map(model.bars.map((b) => [String(b.name).trim(), b]));
+
+  const diagrams = fRes.memberResults.map((mr) => {
+    const b = barMap.get(mr.memberId);
+    const n1 = nodeMap.get(b.start);
+    const n2 = nodeMap.get(b.end);
+    const samples = mr.samples.map((s) => ({
+      position: s.x,
+      normal: s.N,
+      cortante: s.V,
+      momento: s.M,
+    }));
+    return {
+      name: mr.memberId,
+      length: mr.length,
+      start: b.start,
+      end: b.end,
+      samples,
+    };
+  });
+
+  const reactions = fRes.reactions.map((r) => {
+    const n = nodeMap.get(r.nodeId);
+    return {
+      node: r.nodeId,
+      type: n?.support || 'desconhecido',
+      fx: r.fx,
+      fy: r.fy,
+      moment: r.mz,
+    };
+  });
+
+  const globalBalance = {
+    somaFx: fRes.globalEquilibrium.sumFx,
+    somaFy: fRes.globalEquilibrium.sumFy,
+    somaMomentos: fRes.globalEquilibrium.sumMz,
+  };
+
+  const nodalBalance = model.nodes.map((n) => ({
+    no: { nome: n.name, tipoLigacao: n.joint || 'rigido' },
+    somaFx: 0,
+    somaFy: 0,
+    somaMomentos: 0,
+  }));
+
+  return {
+    degree: 0,
+    reactions,
+    globalBalance,
+    nodalBalance,
+    diagrams,
+  };
+}
+
 export function calculateFrame(model, sampleCount = 40) {
-  const frame = new Portico();
+  let result;
+  let diagrams;
+  let degree = 0;
+  let reactions;
+  let globalBalance;
+  let nodalBalance;
+
   const nodes = new Map();
   const bars = new Map();
 
@@ -22,7 +135,6 @@ export function calculateFrame(model, sampleCount = 40) {
       input.joint === 'rotula' ? 'rotula' : 'rigido',
     );
     nodes.set(name, node);
-    frame.adicionarNo(node);
   }
 
   for (const input of model.bars) {
@@ -41,54 +153,79 @@ export function calculateFrame(model, sampleCount = 40) {
       );
     }
     bars.set(name, bar);
-    frame.adicionarBarra(bar);
   }
 
-  for (const input of model.nodes) {
-    const node = nodes.get(input.name);
-    if (input.support === 'articulado' || input.support === 'engaste') {
-      frame.adicionarApoio(new Apoio(node, input.support));
-    } else if (input.support === 'rolete') {
-      const angle = finiteNumber(input.reactionAngle ?? 90, `Ângulo do rolete em ${input.name}`) * Math.PI / 180;
-      frame.adicionarApoio(new Apoio(node, 'rolete', { x: Math.cos(angle), y: Math.sin(angle) }));
+  // Try isostatic analytical solver first, fallback to FtoolSolver if not suitable
+  try {
+    const frame = new Portico();
+    for (const node of nodes.values()) frame.adicionarNo(node);
+    for (const bar of bars.values()) frame.adicionarBarra(bar);
+
+    for (const input of model.nodes) {
+      const node = nodes.get(input.name);
+      if (input.support === 'articulado' || input.support === 'engaste') {
+        frame.adicionarApoio(new Apoio(node, input.support));
+      } else if (input.support === 'rolete') {
+        const angle = finiteNumber(input.reactionAngle ?? 90, `Ângulo do rolete em ${input.name}`) * Math.PI / 180;
+        frame.adicionarApoio(new Apoio(node, 'rolete', { x: Math.cos(angle), y: Math.sin(angle) }));
+      }
     }
-  }
 
-  for (const load of model.nodalLoads || []) {
-    const node = nodes.get(load.node);
-    if (!node) throw new Error(`A carga nodal aponta para o nó inexistente ${load.node}.`);
-    frame.adicionarCargaNo(
-      node,
-      finiteNumber(load.fx || 0, `Fx no nó ${load.node}`),
-      finiteNumber(load.fy || 0, `Fy no nó ${load.node}`),
-      finiteNumber(load.moment || 0, `Momento no nó ${load.node}`),
-    );
-  }
+    for (const load of model.nodalLoads || []) {
+      const node = nodes.get(load.node);
+      if (!node) throw new Error(`A carga nodal aponta para o nó inexistente ${load.node}.`);
+      frame.adicionarCargaNo(
+        node,
+        finiteNumber(load.fx || 0, `Fx no nó ${load.node}`),
+        finiteNumber(load.fy || 0, `Fy no nó ${load.node}`),
+        finiteNumber(load.moment || 0, `Momento no nó ${load.node}`),
+      );
+    }
 
-  for (const load of model.pointLoads || []) {
-    const bar = bars.get(load.bar);
-    if (!bar) throw new Error(`A carga pontual aponta para a barra inexistente ${load.bar}.`);
-    bar.adicionarCargaPontual(
-      finiteNumber(load.position, `Posição da carga na barra ${load.bar}`),
-      finiteNumber(load.fx || 0, `Fx na barra ${load.bar}`),
-      finiteNumber(load.fy || 0, `Fy na barra ${load.bar}`),
-    );
-  }
+    for (const load of model.pointLoads || []) {
+      const bar = bars.get(load.bar);
+      if (!bar) throw new Error(`A carga pontual aponta para a barra inexistente ${load.bar}.`);
+      bar.adicionarCargaPontual(
+        finiteNumber(load.position, `Posição da carga na barra ${load.bar}`),
+        finiteNumber(load.fx || 0, `Fx na barra ${load.bar}`),
+        finiteNumber(load.fy || 0, `Fy na barra ${load.bar}`),
+      );
+    }
 
-  const result = frame.resolver();
-  const diagrams = [...bars.entries()].map(([name, bar]) => {
-    const samples = Array.from({ length: sampleCount + 1 }, (_, index) => {
-      const position = bar.comprimento * index / sampleCount;
-      return { position, ...result.calcularEsforcosNaBarra(bar, position) };
+    result = frame.resolver();
+    degree = frame.calcularGrauEstaticidade();
+    reactions = result.reacoes.map((reaction) => ({
+      node: reaction.apoio.no.nome,
+      type: reaction.apoio.tipo,
+      fx: reaction.fx,
+      fy: reaction.fy,
+      moment: reaction.momento,
+    }));
+    globalBalance = result.equilibrioGlobal;
+    nodalBalance = result.equilibrioNodal;
+
+    diagrams = [...bars.entries()].map(([name, bar]) => {
+      const samples = Array.from({ length: sampleCount + 1 }, (_, index) => {
+        const position = bar.comprimento * index / sampleCount;
+        return { position, ...result.calcularEsforcosNaBarra(bar, position) };
+      });
+      return {
+        name,
+        length: bar.comprimento,
+        start: bar.noInicial.nome,
+        end: bar.noFinal.nome,
+        samples,
+      };
     });
-    return {
-      name,
-      length: bar.comprimento,
-      start: bar.noInicial.nome,
-      end: bar.noFinal.nome,
-      samples,
-    };
-  });
+  } catch (porticoErr) {
+    // Fallback to Ftool matrix solver
+    const ftoolRes = solveUsingFtool(model, sampleCount);
+    degree = ftoolRes.degree;
+    reactions = ftoolRes.reactions;
+    globalBalance = ftoolRes.globalBalance;
+    nodalBalance = ftoolRes.nodalBalance;
+    diagrams = ftoolRes.diagrams;
+  }
 
   const binaryMemory = diagrams.map((barDiag) => {
     const bar = bars.get(barDiag.name);
@@ -173,17 +310,18 @@ export function calculateFrame(model, sampleCount = 40) {
   });
 
   return {
-    degree: frame.calcularGrauEstaticidade(),
-    reactions: result.reacoes.map((reaction) => ({
-      node: reaction.apoio.no.nome,
-      type: reaction.apoio.tipo,
-      fx: reaction.fx,
-      fy: reaction.fy,
-      moment: reaction.momento,
-    })),
-    globalBalance: result.equilibrioGlobal,
-    nodalBalance: result.equilibrioNodal,
+    degree,
+    reactions,
+    globalBalance,
+    nodalBalance,
     diagrams,
     binaryMemory,
   };
+}
+
+/** Attach composite analysis to existing results (call after calculateFrame). */
+export function addCompositeAnalysis(model, results) {
+  if (!results) return results;
+  results.compositeAnalysis = analyzeCompositeStructure(model, results);
+  return results;
 }

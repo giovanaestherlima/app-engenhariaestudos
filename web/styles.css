@@ -454,9 +454,39 @@ h3 { margin-bottom: 7px; color: var(--navy); font-size: 15px; }
 .quiz-solution-box { margin-top: 12px; padding: 12px 14px; background: #f4fbf9; border: 1px solid #c9ece4; border-radius: 6px; font-size: 12px; color: #355e55; line-height: 1.6; white-space: pre-line; }
 .quiz-solution-box strong { color: #0a7363; display: block; margin-bottom: 4px; }
 
+/* Estilos da Análise de Pórtico Isostático Composto (Método dos Binários) */
+.composite-analysis { margin-bottom: 24px; display: grid; gap: 16px; }
+.composite-section { background: #ffffff; border: 1px solid #dce8ea; border-radius: 10px; padding: 18px 20px; box-shadow: 0 2px 8px rgba(18, 60, 91, .04); }
+.composite-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.composite-section-head h3 { margin: 0; font-size: 16px; color: var(--navy); }
+.composite-section-head .eyebrow { margin: 0 0 2px; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--teal-dark); font-weight: 700; }
+
+.composite-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+.composite-badge.ok { background: #dff5ef; color: #097d6e; border: 1px solid #bee8de; }
+.composite-badge.warn { background: #faeade; color: #a44835; border: 1px solid #f1cfc4; }
+.composite-badge.secondary { background: #e8f4fc; color: #16689d; border: 1px solid #cce5f7; }
+.composite-badge.principal { background: #eaf8f4; color: #0b7f6c; border: 1px solid #c5ede3; }
+.composite-badge.tension { background: #e3eff7; color: #166094; border: 1px solid #c9dfed; }
+.composite-badge.compression { background: #faeade; color: #a44835; border: 1px solid #f1cfc4; }
+
+.composite-card { background: #fbfdfd; border: 1px solid #e7f0f0; border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #436070; line-height: 1.6; }
+.composite-card p { margin: 0 0 8px; }
+.composite-card p strong { color: var(--ink); }
+
+.composite-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.composite-part-card, .composite-pendular-card, .composite-hinge-card { background: #fcfefe; border: 1px solid #e2ecec; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.composite-part-card h4, .composite-pendular-card h4, .composite-hinge-card h4 { margin: 0; font-size: 14px; color: var(--navy); display: flex; align-items: center; justify-content: space-between; }
+.composite-part-card p, .composite-pendular-card p, .composite-hinge-card p { margin: 0; font-size: 12px; color: #536c7a; }
+
+.composite-step { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12px; color: #496373; line-height: 1.55; }
+.composite-step li { padding-left: 2px; }
+
+.composite-verification .composite-card { border-left: 4px solid var(--teal); }
+
 @media (max-width: 900px) {
   .binary-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .nodal-balance-grid { grid-template-columns: 1fr; }
+  .composite-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
