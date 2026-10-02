@@ -436,6 +436,8 @@ function renderSidebar() {
     <button class="side-link" type="button" data-action="show-about"><span class="small-icon">${icon('document')}</span>Sobre o protótipo</button>
     <p class="side-foot">Conteúdo de apoio aos estudos.<br>Confira sempre normas e especificações vigentes.</p>`;
   sidebar.classList.toggle('open', state.menuOpen);
+  const appBody = document.querySelector('.app-body');
+  if (appBody) appBody.classList.toggle('sidebar-closed', !state.menuOpen);
   scrim.classList.toggle('open', state.menuOpen);
 }
 
