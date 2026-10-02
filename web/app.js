@@ -545,6 +545,7 @@ function extractModelFromFtool() {
         name: m.name || m.id,
         start: n1?.name || n1?.id || '',
         end: n2?.name || n2?.id || '',
+        release: m.release || 'none',
         qx: dload?.direction === 'global' ? (dload.qxi || 0) : 0,
         qy: dload?.direction === 'global' ? (dload.qyi || 0) : 0,
       };

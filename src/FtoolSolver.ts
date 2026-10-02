@@ -229,8 +229,38 @@ export class FtoolSolver {
       const A = sec.A;
       const I = sec.I;
 
-      const relStart = (mem.release === "start" || mem.release === "both") || Boolean(n1.hinged || n1.joint === "articulado");
-      const relEnd = (mem.release === "end" || mem.release === "both") || Boolean(n2.hinged || n2.joint === "articulado");
+      const isNodePin = (node: FtoolNode) => {
+        if (node.hinged || node.joint === "articulado") return true;
+        if (node.support && !node.support.fixRz && (node.support.fixX || node.support.fixY)) return true;
+        return false;
+      };
+
+      const hasTransverseLoad = Boolean(
+        mem.distributedLoads &&
+        mem.distributedLoads.some(
+          (dl) => (dl.qxi || 0) !== 0 || (dl.qyi || 0) !== 0 || (dl.qxj || 0) !== 0 || (dl.qyj || 0) !== 0,
+        ),
+      );
+
+      const isPendular = !hasTransverseLoad && isNodePin(n1) && isNodePin(n2);
+
+      let relStart = (mem.release === "start" || mem.release === "both") || Boolean(n1.hinged || n1.joint === "articulado");
+      let relEnd = (mem.release === "end" || mem.release === "both") || Boolean(n2.hinged || n2.joint === "articulado");
+
+      if (isPendular) {
+        relStart = true;
+        relEnd = true;
+      } else {
+        if (n1.support && !n1.support.fixRz && (n1.support.fixX || n1.support.fixY)) {
+          const connected = model.members.filter((m) => m.startNodeId === n1.id || m.endNodeId === n1.id);
+          if (connected.length > 1) relStart = true;
+        }
+        if (n2.support && !n2.support.fixRz && (n2.support.fixX || n2.support.fixY)) {
+          const connected = model.members.filter((m) => m.startNodeId === n2.id || m.endNodeId === n2.id);
+          if (connected.length > 1) relEnd = true;
+        }
+      }
+
       const release: MemberRelease = relStart && relEnd ? "both" : relStart ? "start" : relEnd ? "end" : "none";
 
       // Build local stiffness matrix 6x6 based on end releases
